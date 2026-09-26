@@ -2,603 +2,271 @@
 <html lang="fi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Barricade</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Barrikadi</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&display=swap');
-
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --red: #e63946;
-    --blue: #457b9d;
-    --red-light: #ff6b6b;
-    --blue-light: #74b3ce;
-    --bg: #0d0d0d;
-    --grid: #1a1a2e;
-    --cell: #111122;
-    --wall-w: 6px;
-    --cell-size: 60px;
-    --grid-cols: 9;
-    --grid-rows: 9;
+:root{
+  --bg:#f4f4f2; --panel:#ffffff; --text:#181818; --muted:#6b6b6b;
+  --grid:#d8d8d4; --cellbg:#fbfbfa; --slot:#e4e4e0; --slot-on:#3a3a38;
+  --p0:#e5484d; --p1:#2f6fed; --p2:#e8a23d; --p3:#2fb56a;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141414; --panel:#1d1d1c; --text:#f2f2ef; --muted:#9a9a95;
+    --grid:#333331; --cellbg:#1b1b1a; --slot:#2a2a28; --slot-on:#e8e8e2;
   }
-
-  body {
-    background: var(--bg);
-    color: #fff;
-    font-family: 'Share Tech Mono', monospace;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    padding: 12px 8px 24px;
-    gap: 10px;
-    user-select: none;
-  }
-
-  h1 {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: clamp(2rem, 6vw, 3.5rem);
-    letter-spacing: 0.15em;
-    background: linear-gradient(90deg, var(--red-light), #fff, var(--blue-light));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  #scoreboard {
-    display: flex;
-    gap: 24px;
-    align-items: center;
-    font-size: 0.85rem;
-    letter-spacing: 0.05em;
-  }
-
-  .player-info {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    padding: 6px 14px;
-    border-radius: 6px;
-    border: 2px solid transparent;
-    transition: border-color 0.2s, background 0.2s;
-  }
-  .player-info.p1 { border-color: var(--red); background: rgba(230,57,70,0.08); }
-  .player-info.p2 { border-color: var(--blue); background: rgba(69,123,157,0.08); }
-  .player-info.active { filter: brightness(1.3); box-shadow: 0 0 12px currentColor; }
-  .player-info .name { font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 0.1em; }
-  .player-info.p1 .name { color: var(--red-light); }
-  .player-info.p2 .name { color: var(--blue-light); }
-  .player-info .walls-left { font-size: 0.75rem; opacity: 0.8; }
-
-  #vs { font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem; opacity: 0.5; }
-
-  #status-bar {
-    font-size: 0.8rem;
-    letter-spacing: 0.05em;
-    opacity: 0.85;
-    min-height: 1.2em;
-    text-align: center;
-  }
-
-  #mode-toggle {
-    display: flex;
-    gap: 8px;
-    font-size: 0.75rem;
-  }
-
-  .mode-btn {
-    padding: 4px 12px;
-    border-radius: 4px;
-    border: 1px solid #444;
-    background: transparent;
-    color: #aaa;
-    cursor: pointer;
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 0.75rem;
-    transition: all 0.15s;
-  }
-  .mode-btn.active { background: #fff; color: #000; border-color: #fff; }
-
-  /* ─── BOARD ─── */
-  #board-wrap {
-    position: relative;
-    touch-action: none;
-  }
-
-  #board {
-    display: grid;
-    grid-template-columns: repeat(var(--grid-cols), var(--cell-size));
-    grid-template-rows: repeat(var(--grid-rows), var(--cell-size));
-    gap: 0;
-    border: 2px solid #333;
-    border-radius: 4px;
-    overflow: hidden;
-    position: relative;
-  }
-
-  .cell {
-    width: var(--cell-size);
-    height: var(--cell-size);
-    background: var(--cell);
-    border: 1px solid #1e1e38;
-    position: relative;
-    cursor: default;
-  }
-
-  /* Goal zones */
-  .goal-p1 { background: rgba(230,57,70,0.07); }
-  .goal-p2 { background: rgba(69,123,157,0.07); }
-
-  /* Highlight moves */
-  .cell.reachable {
-    background: rgba(255,255,255,0.06);
-    cursor: pointer;
-  }
-  .cell.reachable::after {
-    content: '';
-    position: absolute;
-    inset: 14px;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.15);
-    pointer-events: none;
-  }
-  .cell.reachable:hover { background: rgba(255,255,255,0.12); }
-
-  /* Wall previews on edges */
-  .cell .edge {
-    position: absolute;
-    z-index: 3;
-  }
-  .cell .edge.top    { top: -3px; left: 4px; right: 4px; height: 6px; cursor: pointer; }
-  .cell .edge.bottom { bottom: -3px; left: 4px; right: 4px; height: 6px; cursor: pointer; }
-  .cell .edge.left   { left: -3px; top: 4px; bottom: 4px; width: 6px; cursor: pointer; }
-  .cell .edge.right  { right: -3px; top: 4px; bottom: 4px; width: 6px; cursor: pointer; }
-
-  .cell .edge.placeable { background: rgba(255,255,255,0.06); border-radius: 2px; }
-  .cell .edge.placeable:hover { background: rgba(255,255,255,0.25); }
-  .cell .edge.placeable.second { background: rgba(255,255,100,0.18); }
-  .cell .edge.placeable.second:hover { background: rgba(255,255,100,0.45); }
-
-  /* Placed walls – rendered as SVG overlay for crisp lines */
-  #wall-layer {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 5;
-  }
-
-  /* Pawns */
-  .pawn {
-    position: absolute;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 10;
-    pointer-events: none;
-    transition: top 0.18s cubic-bezier(.4,0,.2,1), left 0.18s cubic-bezier(.4,0,.2,1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-  }
-  .pawn.p1 { background: radial-gradient(circle at 35% 30%, #ff9999, var(--red)); box-shadow: 0 4px 16px rgba(230,57,70,0.6); }
-  .pawn.p2 { background: radial-gradient(circle at 35% 30%, #aad4e8, var(--blue)); box-shadow: 0 4px 16px rgba(69,123,157,0.6); }
-
-  /* Win overlay */
-  #win-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.82);
-    z-index: 100;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    gap: 20px;
-    backdrop-filter: blur(4px);
-  }
-  #win-overlay.show { display: flex; }
-  #win-msg {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: clamp(2.5rem, 10vw, 5rem);
-    letter-spacing: 0.1em;
-    text-align: center;
-  }
-  #win-msg.p1 { color: var(--red-light); }
-  #win-msg.p2 { color: var(--blue-light); }
-  #restart-btn {
-    padding: 12px 36px;
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 1.4rem;
-    letter-spacing: 0.12em;
-    background: #fff;
-    color: #000;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: transform 0.12s;
-  }
-  #restart-btn:hover { transform: scale(1.05); }
-
-  #reset-small {
-    background: transparent;
-    border: 1px solid #555;
-    color: #888;
-    padding: 4px 14px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 0.75rem;
-    transition: all 0.15s;
-  }
-  #reset-small:hover { border-color: #aaa; color: #eee; }
-
-  /* Mobile responsive */
-  @media (max-width: 600px) {
-    :root { --cell-size: 38px; --wall-w: 5px; }
-    h1 { font-size: 2rem; }
-  }
-  @media (max-width: 380px) {
-    :root { --cell-size: 32px; }
-  }
+}
+:root[data-theme="dark"]{
+  --bg:#141414; --panel:#1d1d1c; --text:#f2f2ef; --muted:#9a9a95;
+  --grid:#333331; --cellbg:#1b1b1a; --slot:#2a2a28; --slot-on:#e8e8e2;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  display:flex; flex-direction:column; align-items:center; gap:14px; padding-left:14px; padding-right:14px;
+}
+h1{font-size:1.3rem; letter-spacing:0.02em; margin:18px 0 0;}
+#setup{display:flex; flex-direction:column; align-items:center; gap:12px; padding:20px;}
+.count-row{display:flex; gap:8px;}
+.count-btn{
+  padding:10px 18px; border-radius:8px; border:1px solid var(--grid);
+  background:var(--panel); color:var(--text); font-size:1rem; cursor:pointer;
+}
+.count-btn.sel{border-color:var(--p1); box-shadow:0 0 0 2px var(--p1) inset;}
+.mode-row{display:flex; gap:8px; position:fixed; z-index:10; padding:5px; border-radius:12px; background:var(--panel); box-shadow:0 2px 10px rgba(0,0,0,.18); border:2px solid var(--grid);}
+.mode-btn{padding:9px 18px; border-radius:8px; border:1px solid var(--grid); background:var(--panel); color:var(--text); font-size:0.9rem; cursor:pointer;}
+.mode-btn.sel{border-color:var(--p1); box-shadow:0 0 0 2px var(--p1) inset; font-weight:600;}
+#board.wallmode .hslot,#board.wallmode .vslot{box-shadow:0 0 0 1px var(--p1) inset;}
+#board.wallmode .cell{opacity:.8;}
+.start-btn{
+  padding:10px 22px; border-radius:8px; border:none; background:var(--p1);
+  color:white; font-size:1rem; cursor:pointer; margin-top:4px;
+}
+#game{display:none; flex-direction:column; align-items:center; gap:10px; width:100%; max-width:480px;}
+#hud{display:flex; justify-content:center; width:100%; font-size:0.8rem; gap:6px; flex-wrap:wrap;}
+.pchip{display:flex; align-items:center; gap:5px; padding:4px 8px; border-radius:6px; background:var(--panel); border:1px solid var(--grid);}
+.pchip.active{outline:2px solid currentColor;}
+.dot{width:10px; height:10px; border-radius:50%; flex:none;}
+#board{
+  display:grid; touch-action:manipulation; overflow:auto; max-width:100%;
+  background:var(--grid); border-radius:6px; padding:4px;
+}
+.cell{background:var(--cellbg); border-radius:2px; position:relative;}
+.cell.move{cursor:pointer;}
+.cell.move::after{content:"";position:absolute;inset:22%;border-radius:50%;background:var(--movecolor,var(--p1));opacity:0.28;}
+.pawn{position:absolute; inset:14%; border-radius:50%;}
+.hslot,.vslot{background:var(--slot); cursor:pointer; border-radius:2px;}
+.hslot.on,.vslot.on{background:var(--slot-on);}
+.joint{background:transparent;}
+#msg{min-height:1.2em; font-size:0.85rem; color:var(--muted); text-align:center;}
+#controls{display:flex; gap:10px;}
+button.small{padding:8px 14px; border-radius:8px; border:1px solid var(--grid); background:var(--panel); color:var(--text); cursor:pointer; font-size:0.85rem;}
+#win{display:none; flex-direction:column; align-items:center; gap:10px; padding:20px;}
 </style>
 </head>
 <body>
+<h1>BARRIKADI</h1>
 
-<h1>BARRICADE</h1>
-
-<div id="scoreboard">
-  <div class="player-info p1 active" id="info1">
-    <div class="name">PUNAINEN</div>
-    <div class="walls-left" id="walls1">🧱 10 seinää</div>
-    <div style="font-size:0.7rem;opacity:0.6">↑ Tavoite: yläreuna</div>
-  </div>
-  <div id="vs">VS</div>
-  <div class="player-info p2" id="info2">
-    <div class="name">SININEN</div>
-    <div class="walls-left" id="walls2">🧱 10 seinää</div>
-    <div style="font-size:0.7rem;opacity:0.6">↓ Tavoite: alareuna</div>
-  </div>
+<div id="setup">
+  <div class="count-row" id="countRow"></div>
+  <button class="start-btn" id="startBtn">Aloita peli</button>
 </div>
 
-<div id="mode-toggle">
-  <button class="mode-btn active" id="btn-move" onclick="setMode('move')">🎯 LIIKU</button>
-  <button class="mode-btn" id="btn-wall" onclick="setMode('wall')">🧱 SEINÄ</button>
-</div>
-
-<div id="status-bar">Punaisen vuoro – valitse tila</div>
-
-<div id="board-wrap">
+<div id="game">
+  <div id="hud"></div>
+  <div class="mode-row" id="modeRow">
+    <button class="mode-btn sel" id="moveModeBtn">🚶 Liiku</button>
+    <button class="mode-btn" id="wallModeBtn">🧱 Seinä</button>
+  </div>
   <div id="board"></div>
-  <svg id="wall-layer"></svg>
-  <div class="pawn p1" id="pawn1">🔴</div>
-  <div class="pawn p2" id="pawn2">🔵</div>
+  <div id="msg"></div>
+  <div id="controls">
+    <button class="small" id="newGameBtn">↺ Uusi peli</button>
+  </div>
 </div>
 
-<button id="reset-small" onclick="initGame()">↺ Uusi peli</button>
-
-<div id="win-overlay">
-  <div id="win-msg"></div>
-  <button id="restart-btn" onclick="initGame()">UUSI PELI</button>
+<div id="win">
+  <div id="winText" style="font-size:1.4rem;font-weight:700;"></div>
+  <button class="start-btn" id="againBtn">Pelaa uudestaan</button>
 </div>
 
 <script>
-const COLS = 9, ROWS = 9;
-const WALLS_PER_PLAYER = 10;
+const SIZE=9;
+const ALL=[
+ {id:0,name:'Punainen', gen:'Punaisen', ade:'Punaisella', color:'var(--p0)', row:0,col:4,axis:'row',goal:8,edge:'top'},
+ {id:1,name:'Sininen',  gen:'Sinisen',  ade:'Sinisellä',  color:'var(--p1)', row:8,col:4,axis:'row',goal:0,edge:'bottom'},
+ {id:2,name:'Keltainen',gen:'Keltaisen',ade:'Keltaisella',color:'var(--p2)', row:4,col:0,axis:'col',goal:8,edge:'left'},
+ {id:3,name:'Vihreä',   gen:'Vihreän',  ade:'Vihreällä',  color:'var(--p3)', row:4,col:8,axis:'col',goal:0,edge:'right'},
+];
+let players=[], hWalls=new Set(), vWalls=new Set(), cur=0, over=false, chosenN=2, mode='move';
 
-// State
-let currentPlayer; // 1 or 2
-let mode; // 'move' or 'wall'
-let pos; // {1:{r,c}, 2:{r,c}}
-let wallsLeft; // {1:n, 2:n}
-let gameOver;
-let wallGroups = []; // [{segs:[k1,k2], player}]
-let wallSegs = new Set(); // all placed segment keys
-
-// Two-click wall placement state
-let wallClick1 = null; // first clicked segKey, or null
-
-// DOM
-const board = document.getElementById('board');
-const wallLayer = document.getElementById('wall-layer');
-const pawn1 = document.getElementById('pawn1');
-const pawn2 = document.getElementById('pawn2');
-const statusBar = document.getElementById('status-bar');
-const winOverlay = document.getElementById('win-overlay');
-const winMsg = document.getElementById('win-msg');
-const info1 = document.getElementById('info1');
-const info2 = document.getElementById('info2');
-
-// ── Helpers ──────────────────────────────────────────────
-
-function segKey(r1,c1,r2,c2) {
-  if (r1>r2||(r1===r2&&c1>c2)) return `${r2},${c2},${r1},${c1}`;
-  return `${r1},${c1},${r2},${c2}`;
+document.getElementById('moveModeBtn').onclick=()=>setMode('move');
+document.getElementById('wallModeBtn').onclick=()=>setMode('wall');
+function setMode(m){
+  mode=m;
+  document.getElementById('moveModeBtn').classList.toggle('sel',m==='move');
+  document.getElementById('wallModeBtn').classList.toggle('sel',m==='wall');
+  render();
 }
 
-function hasWall(r1,c1,r2,c2) { return wallSegs.has(segKey(r1,c1,r2,c2)); }
+const countRow=document.getElementById('countRow');
+[2,3,4].forEach(n=>{
+  const b=document.createElement('button');
+  b.className='count-btn'+(n===2?' sel':'');
+  b.textContent=n+' pelaajaa';
+  b.onclick=()=>{chosenN=n; [...countRow.children].forEach(c=>c.classList.remove('sel')); b.classList.add('sel');};
+  countRow.appendChild(b);
+});
+document.getElementById('startBtn').onclick=()=>startGame(chosenN);
+document.getElementById('newGameBtn').onclick=()=>{document.getElementById('game').style.display='none';document.getElementById('setup').style.display='flex';};
+document.getElementById('againBtn').onclick=()=>{document.getElementById('win').style.display='none';startGame(chosenN);};
 
-// Are two segments parallel and adjacent (share an endpoint cell row/col)?
-function segsAreParallelAdjacent(sk1, sk2) {
-  const [r1,c1,r2,c2] = sk1.split(',').map(Number);
-  const [r3,c3,r4,c4] = sk2.split(',').map(Number);
-  const horiz1 = r1===r2, horiz2 = r3===r4;
-  if (horiz1 !== horiz2) return false; // must be same direction
-  if (horiz1) {
-    // both horizontal (between rows): same column pairs? adjacent rows?
-    if (Math.max(c1,c2)!==Math.max(c3,c4)) return false; // same col boundary
-    return Math.abs(r1-r3)===1;
-  } else {
-    // both vertical (between cols): same row pairs? adjacent cols?
-    if (Math.max(r1,r2)!==Math.max(r3,r4)) return false; // same row boundary
-    return Math.abs(c1-c3)===1;
+function startGame(n){
+  const pick = n===2?[0,1] : n===3?[0,1,2] : [0,1,2,3];
+  players = pick.map(i=>({...ALL[i], walls:Math.floor(20/n)}));
+  hWalls.clear(); vWalls.clear(); cur=0; over=false; setMode('move');
+  document.getElementById('setup').style.display='none';
+  document.getElementById('win').style.display='none';
+  document.getElementById('game').style.display='flex';
+  render();
+}
+
+function isBlocked(r,c,nr,nc){
+  if(nr===r+1) return hWalls.has(r+'_'+c);
+  if(nr===r-1) return hWalls.has(nr+'_'+c);
+  if(nc===c+1) return vWalls.has(r+'_'+c);
+  if(nc===c-1) return vWalls.has(r+'_'+nc);
+  return false;
+}
+function occupant(r,c,exclude){
+  return players.find(p=>p!==exclude&&p.row===r&&p.col===c);
+}
+function validMoves(p){
+  const moves=[]; const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+  for(const [dr,dc] of dirs){
+    const nr=p.row+dr,nc=p.col+dc;
+    if(nr<0||nr>=SIZE||nc<0||nc>=SIZE) continue;
+    if(isBlocked(p.row,p.col,nr,nc)) continue;
+    if(!occupant(nr,nc,p)){moves.push([nr,nc]);continue;}
+    const jr=nr+dr,jc=nc+dc;
+    if(jr<0||jr>=SIZE||jc<0||jc>=SIZE) continue;
+    if(isBlocked(nr,nc,jr,jc)) continue;
+    if(!occupant(jr,jc,p)) moves.push([jr,jc]);
   }
+  return moves;
 }
-
-// BFS path check
-function hasPath(player, segs_set) {
-  const start = pos[player];
-  const goalRow = player===1 ? 0 : ROWS-1;
-  const visited = new Set();
-  const queue = [{r:start.r,c:start.c}];
-  visited.add(`${start.r},${start.c}`);
-  const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
-  while(queue.length) {
-    const {r,c}=queue.shift();
-    if(r===goalRow) return true;
-    for(const [dr,dc] of dirs) {
+function hasPath(p){
+  const seen=new Set([p.row+'_'+p.col]); const q=[[p.row,p.col]];
+  while(q.length){
+    const [r,c]=q.shift();
+    if(p.axis==='row'&&r===p.goal) return true;
+    if(p.axis==='col'&&c===p.goal) return true;
+    for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
       const nr=r+dr,nc=c+dc;
-      if(nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
-      const k=`${nr},${nc}`;
-      if(visited.has(k)) continue;
-      if(segs_set.has(segKey(r,c,nr,nc))) continue;
-      visited.add(k); queue.push({r:nr,c:nc});
+      if(nr<0||nr>=SIZE||nc<0||nc>=SIZE) continue;
+      if(isBlocked(r,c,nr,nc)) continue;
+      const k=nr+'_'+nc;
+      if(!seen.has(k)){seen.add(k);q.push([nr,nc]);}
     }
   }
   return false;
 }
 
-function getReachable(player) {
-  const {r,c}=pos[player];
-  const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
-  const reachable=[];
-  for(const [dr,dc] of dirs) {
-    const nr=r+dr,nc=c+dc;
-    if(nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
-    if(hasWall(r,c,nr,nc)) continue;
-    const other=pos[player===1?2:1];
-    if(nr===other.r&&nc===other.c) continue;
-    reachable.push({r:nr,c:nc});
-  }
-  return reachable;
-}
-
-// ── Drawing ───────────────────────────────────────────────
-
-function getCS() {
-  return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cell-size'));
-}
-
-function placePawns() {
-  const cs=getCS();
-  pawn1.style.left=(pos[1].c*cs+cs/2)+'px'; pawn1.style.top=(pos[1].r*cs+cs/2)+'px';
-  pawn2.style.left=(pos[2].c*cs+cs/2)+'px'; pawn2.style.top=(pos[2].r*cs+cs/2)+'px';
-}
-
-function segCoords(seg, cs) {
-  const [r1,c1,r2,c2]=seg.split(',').map(Number);
-  if(r1===r2) { // vertical line (column boundary)
-    const bc=Math.max(c1,c2);
-    return {x1:bc*cs,y1:r1*cs+3,x2:bc*cs,y2:r1*cs+cs-3};
-  } else { // horizontal line (row boundary)
-    const br=Math.max(r1,r2);
-    return {x1:c1*cs+3,y1:br*cs,x2:c1*cs+cs-3,y2:br*cs};
-  }
-}
-
-function makeLine(x1,y1,x2,y2,stroke,width,opacity) {
-  const l=document.createElementNS('http://www.w3.org/2000/svg','line');
-  l.setAttribute('x1',x1);l.setAttribute('y1',y1);
-  l.setAttribute('x2',x2);l.setAttribute('y2',y2);
-  l.setAttribute('stroke',stroke);
-  l.setAttribute('stroke-width',width||7);
-  l.setAttribute('stroke-linecap','round');
-  if(opacity) l.setAttribute('opacity',opacity);
-  return l;
-}
-
-function drawWalls() {
-  const cs=getCS();
-  wallLayer.setAttribute('width',COLS*cs);
-  wallLayer.setAttribute('height',ROWS*cs);
-  wallLayer.innerHTML='';
-  const p1color='#e63946', p2color='#457b9d';
-
-  // Placed walls
-  for(const grp of wallGroups) {
-    const color=grp.player===1?p1color:p2color;
-    for(const seg of grp.segs) {
-      const {x1,y1,x2,y2}=segCoords(seg,cs);
-      wallLayer.appendChild(makeLine(x1,y1,x2,y2,color,7));
-    }
+function render(){
+  const hud=document.getElementById('hud'); hud.innerHTML='';
+  players.forEach((p,i)=>{
+    const d=document.createElement('div');
+    d.className='pchip'+(i===cur?' active':'');
+    d.style.color=p.color;
+    d.innerHTML=`<span class="dot" style="background:${p.color}"></span>${p.name} · \u{1F9F1}${p.walls}`;
+    hud.appendChild(d);
+  });
+  const modeRow=document.getElementById('modeRow');
+  if(players[cur]){
+    const p=players[cur];
+    const edgeStyle={
+      top:   'top:calc(8px + env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%) rotate(180deg);',
+      bottom:'bottom:calc(8px + env(safe-area-inset-bottom,0px)); left:50%; transform:translateX(-50%) rotate(0deg);',
+      left:  'left:8px; top:50%; transform:translateY(-50%) rotate(90deg);',
+      right: 'right:8px; top:50%; transform:translateY(-50%) rotate(-90deg);'
+    };
+    modeRow.style.cssText=edgeStyle[p.edge];
+    modeRow.style.borderColor=p.color;
   }
 
-  // First click preview (single segment, dimmer)
-  if(wallClick1) {
-    const color=currentPlayer===1?p1color:p2color;
-    const {x1,y1,x2,y2}=segCoords(wallClick1,cs);
-    wallLayer.appendChild(makeLine(x1,y1,x2,y2,color,7,0.5));
-  }
-}
-
-// ── UI ───────────────────────────────────────────────────
-
-function setMode(m) {
-  if(gameOver) return;
-  wallClick1=null;
-  mode=m;
-  document.getElementById('btn-move').classList.toggle('active',m==='move');
-  document.getElementById('btn-wall').classList.toggle('active',m==='wall');
-  updateStatus(); renderBoard();
-}
-
-function updateStatus() {
-  const name=currentPlayer===1?'Punaisen':'Sinisen';
-  if(mode==='move') {
-    statusBar.textContent=`${name} vuoro – klikkaa ruutua liikkuaksesi`;
-  } else {
-    if(wallsLeft[currentPlayer]===0) {
-      statusBar.textContent=`${name} vuoro – ei seinää jäljellä, liiku!`;
-    } else if(!wallClick1) {
-      statusBar.textContent=`${name} vuoro – klikkaa 1. seinäsegmentti (reuna)`;
-    } else {
-      statusBar.textContent=`Klikkaa 2. viereinen segmentti – tai sama uudelleen peruuttaaksesi`;
-    }
-  }
-}
-
-function updateInfoPanels() {
-  info1.classList.toggle('active',currentPlayer===1);
-  info2.classList.toggle('active',currentPlayer===2);
-  document.getElementById('walls1').textContent=`🧱 ${wallsLeft[1]} seinää`;
-  document.getElementById('walls2').textContent=`🧱 ${wallsLeft[2]} seinää`;
-}
-
-// ── Board render ─────────────────────────────────────────
-
-function renderBoard() {
+  const board=document.getElementById('board');
   board.innerHTML='';
-  const reachable=mode==='move'?getReachable(currentPlayer):[];
-  const reachSet=new Set(reachable.map(({r,c})=>`${r},${c}`));
-
-  for(let r=0;r<ROWS;r++) {
-    for(let c=0;c<COLS;c++) {
-      const cell=document.createElement('div');
-      cell.className='cell';
-      if(r===0) cell.classList.add('goal-p1');
-      if(r===ROWS-1) cell.classList.add('goal-p2');
-
-      if(reachSet.has(`${r},${c}`)) {
-        cell.classList.add('reachable');
-        cell.addEventListener('click',()=>doMove(r,c));
-      }
-
-      // Edge hit zones for wall placement
-      if(mode==='wall' && wallsLeft[currentPlayer]>0) {
-        const edgeDefs=[
-          {dir:'top',   dr:-1,dc:0},
-          {dir:'bottom',dr:1, dc:0},
-          {dir:'left',  dr:0, dc:-1},
-          {dir:'right', dr:0, dc:1},
-        ];
-        for(const e of edgeDefs) {
-          const nr=r+e.dr,nc=c+e.dc;
-          if(nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
-          const sk=segKey(r,c,nr,nc);
-          if(wallSegs.has(sk)) continue;
-
-          // Only show as valid second click if it's parallel+adjacent to first click
-          const isSecond = wallClick1 && sk!==wallClick1 && segsAreParallelAdjacent(wallClick1,sk);
-          const isFirst  = !wallClick1;
-          if(!isFirst && !isSecond) continue;
-
-          const edge=document.createElement('div');
-          // Highlight differently if it's a valid second segment
-          edge.className=`edge ${e.dir} placeable${isSecond?' second':''}`;
-          edge.addEventListener('click',(ev)=>{
-            ev.stopPropagation();
-            onEdgeClick(sk);
-          });
-          cell.appendChild(edge);
+  const dim=2*SIZE-1;
+  board.style.gridTemplateColumns=`repeat(${SIZE-1},32px 10px) 32px`;
+  board.style.gridTemplateRows=`repeat(${SIZE-1},32px 10px) 32px`;
+  board.className=mode==='wall'?'wallmode':'';
+  const moves = (over||mode!=='move')? [] : validMoves(players[cur]);
+  for(let i=0;i<dim;i++){
+    for(let j=0;j<dim;j++){
+      const el=document.createElement('div');
+      if(i%2===0&&j%2===0){
+        const r=i/2,c=j/2;
+        el.className='cell';
+        if(moves.some(m=>m[0]===r&&m[1]===c)){
+          el.classList.add('move');
+          el.style.setProperty('--movecolor',players[cur].color);
+          el.onclick=()=>doMove(r,c);
         }
+        const occ=occupant(r,c);
+        if(occ){const pw=document.createElement('div');pw.className='pawn';pw.style.background=occ.color;el.appendChild(pw);}
+      } else if(i%2===1&&j%2===0){
+        const r=(i-1)/2,c=j/2;
+        el.className='hslot'+(hWalls.has(r+'_'+c)?' on':'');
+        if(mode==='wall'&&!over) el.onclick=()=>doWall('h',r,c);
+      } else if(i%2===0&&j%2===1){
+        const r=i/2,c=(j-1)/2;
+        el.className='vslot'+(vWalls.has(r+'_'+c)?' on':'');
+        if(mode==='wall'&&!over) el.onclick=()=>doWall('v',r,c);
+      } else {
+        el.className='joint';
       }
-
-      board.appendChild(cell);
+      board.appendChild(el);
     }
   }
-
-  placePawns(); drawWalls(); updateInfoPanels(); updateStatus();
 }
 
-// ── Game actions ─────────────────────────────────────────
-
-function onEdgeClick(sk) {
-  if(!wallClick1) {
-    // First click: pick any free edge
-    wallClick1=sk;
-    renderBoard();
-    return;
-  }
-  if(sk===wallClick1) {
-    // Clicking same edge cancels
-    wallClick1=null;
-    renderBoard();
-    return;
-  }
-  // Second click: must be parallel and adjacent
-  if(!segsAreParallelAdjacent(wallClick1,sk)) {
-    statusBar.textContent='⚠️ Toisen segmentin täytyy olla viereinen ja samansuuntainen!';
-    return;
-  }
-  // Try to place wall
-  const segs=[wallClick1,sk];
-  for(const s of segs) wallSegs.add(s);
-  const p1ok=hasPath(1,wallSegs), p2ok=hasPath(2,wallSegs);
-  if(!p1ok||!p2ok) {
-    for(const s of segs) wallSegs.delete(s);
-    wallClick1=null;
-    statusBar.textContent='⚠️ Seinä ei saa sulkea tietä kokonaan!';
-    renderBoard();
-    return;
-  }
-  wallGroups.push({segs,player:currentPlayer});
-  wallsLeft[currentPlayer]--;
-  wallClick1=null;
-  nextTurn();
+function doMove(r,c){
+  if(over) return;
+  const p=players[cur];
+  p.row=r;p.col=c;
+  const won=p.axis==='row'?p.row===p.goal:p.col===p.goal;
+  setMsg('');
+  if(won){finish(p);return;}
+  cur=(cur+1)%players.length;
+  render();
 }
-
-function doMove(r,c) {
-  if(gameOver) return;
-  pos[currentPlayer]={r,c};
-  if(currentPlayer===1&&r===0){endGame(1);return;}
-  if(currentPlayer===2&&r===ROWS-1){endGame(2);return;}
-  nextTurn();
+function doWall(type,r,c){
+  if(over) return;
+  const p=players[cur];
+  if(p.walls<=0){setMsg(p.ade+' ei ole enää seiniä.');return;}
+  const set = type==='h'?hWalls:vWalls;
+  const key=r+'_'+c;
+  if(set.has(key)) return;
+  set.add(key);
+  const ok=players.every(hasPath);
+  if(!ok){ set.delete(key); setMsg('Seinä tukkisi jonkun reitin kokonaan – ei sallittu.'); render(); return; }
+  p.walls--;
+  setMsg('');
+  cur=(cur+1)%players.length;
+  render();
 }
-
-function nextTurn() {
-  currentPlayer=currentPlayer===1?2:1;
-  mode='move';
-  wallClick1=null;
-  document.getElementById('btn-move').classList.add('active');
-  document.getElementById('btn-wall').classList.remove('active');
-  updateStatus(); renderBoard();
+function setMsg(t){document.getElementById('msg').textContent=t;}
+function finish(p){
+  over=true;
+  document.getElementById('game').style.display='none';
+  const w=document.getElementById('win');
+  document.getElementById('winText').textContent=p.name+' voitti! \u{1F389}';
+  document.getElementById('winText').style.color=p.color;
+  w.style.display='flex';
 }
-
-function endGame(winner) {
-  gameOver=true;
-  winMsg.textContent=winner===1?'PUNAINEN VOITTAA! 🔴':'SININEN VOITTAA! 🔵';
-  winMsg.className=winner===1?'p1':'p2';
-  winOverlay.classList.add('show');
-}
-
-function initGame() {
-  currentPlayer=1; mode='move'; wallClick1=null;
-  pos={1:{r:ROWS-1,c:Math.floor(COLS/2)},2:{r:0,c:Math.floor(COLS/2)}};
-  wallGroups=[]; wallSegs=new Set();
-  wallsLeft={1:WALLS_PER_PLAYER,2:WALLS_PER_PLAYER};
-  gameOver=false;
-  winOverlay.classList.remove('show');
-  document.getElementById('btn-move').classList.add('active');
-  document.getElementById('btn-wall').classList.remove('active');
-  updateStatus(); renderBoard();
-}
-
-window.addEventListener('resize',()=>{placePawns();drawWalls();});
-initGame();
 </script>
 </body>
 </html>
