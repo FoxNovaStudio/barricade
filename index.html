@@ -37,22 +37,33 @@ h1{font-size:1.3rem; letter-spacing:0.02em; margin:18px 0 0;}
   background:var(--panel); color:var(--text); font-size:1rem; cursor:pointer;
 }
 .count-btn.sel{border-color:var(--p1); box-shadow:0 0 0 2px var(--p1) inset;}
-.mode-row{display:flex; gap:8px; position:fixed; z-index:10; padding:5px; border-radius:12px; background:var(--panel); box-shadow:0 2px 10px rgba(0,0,0,.18); border:2px solid var(--grid);}
-.mode-btn{padding:9px 18px; border-radius:8px; border:1px solid var(--grid); background:var(--panel); color:var(--text); font-size:0.9rem; cursor:pointer;}
+.mode-row{display:flex; gap:6px; position:fixed; z-index:10; padding:3px; border-radius:12px; background:var(--panel); box-shadow:0 2px 10px rgba(0,0,0,.18); border:2px solid var(--grid);}
+.mode-btn{padding:6px 12px; border-radius:8px; border:1px solid var(--grid); background:var(--panel); color:var(--text); font-size:0.8rem; cursor:pointer;}
 .mode-btn.sel{border-color:var(--p1); box-shadow:0 0 0 2px var(--p1) inset; font-weight:600;}
+.cancel-btn{display:none; font-size:1rem; font-weight:700; padding:10px 20px; background:#e5484d; color:#fff; border-color:#e5484d;}
+.mode-row.wall .cancel-btn{display:block;}
+.hslot.pend,.vslot.pend{background:var(--p2) !important;}
 #board.wallmode .hslot,#board.wallmode .vslot{box-shadow:0 0 0 1px var(--p1) inset;}
 #board.wallmode .cell{opacity:.8;}
 .start-btn{
   padding:10px 22px; border-radius:8px; border:none; background:var(--p1);
   color:white; font-size:1rem; cursor:pointer; margin-top:4px;
 }
-#game{display:none; flex-direction:column; align-items:center; gap:10px; width:100%; max-width:480px;}
-#hud{display:flex; justify-content:center; width:100%; font-size:0.8rem; gap:6px; flex-wrap:wrap;}
+#game{display:none; position:fixed; inset:0; z-index:5;}
+#hud{position:fixed; top:56px; left:12px; right:12px; display:flex; justify-content:flex-start; font-size:0.75rem; gap:4px; flex-wrap:wrap; pointer-events:none;}
+#msg{position:fixed; bottom:56px; left:12px; right:12px; pointer-events:none;}
+#controls{position:fixed; top:56px; right:12px;}
+@media (orientation:landscape){
+  #hud{flex-direction:column; flex-wrap:nowrap; left:62px; right:auto; top:12px; max-width:30vw;}
+  #msg{left:auto; right:62px; bottom:12px; width:26vw; text-align:right;}
+  #controls{top:12px; right:62px;}
+}
 .pchip{display:flex; align-items:center; gap:5px; padding:4px 8px; border-radius:6px; background:var(--panel); border:1px solid var(--grid);}
 .pchip.active{outline:2px solid currentColor;}
 .dot{width:10px; height:10px; border-radius:50%; flex:none;}
 #board{
-  display:grid; touch-action:manipulation; overflow:auto; max-width:100%;
+  display:grid; touch-action:manipulation;
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
   background:var(--grid); border-radius:6px; padding:4px;
 }
 .cell{background:var(--cellbg); border-radius:2px; position:relative;}
@@ -64,6 +75,8 @@ h1{font-size:1.3rem; letter-spacing:0.02em; margin:18px 0 0;}
 .joint{background:transparent;}
 #msg{min-height:1.2em; font-size:0.85rem; color:var(--muted); text-align:center;}
 #controls{display:flex; gap:10px;}
+.hslot,.vslot{position:relative;}
+.hslot::after,.vslot::after{content:"";position:absolute;inset:-4px;}
 button.small{padding:8px 14px; border-radius:8px; border:1px solid var(--grid); background:var(--panel); color:var(--text); cursor:pointer; font-size:0.85rem;}
 #win{display:none; flex-direction:column; align-items:center; gap:10px; padding:20px;}
 </style>
@@ -81,6 +94,7 @@ button.small{padding:8px 14px; border-radius:8px; border:1px solid var(--grid); 
   <div class="mode-row" id="modeRow">
     <button class="mode-btn sel" id="moveModeBtn">🚶 Liiku</button>
     <button class="mode-btn" id="wallModeBtn">🧱 Seinä</button>
+    <button class="mode-btn cancel-btn" id="cancelBtn">✕ Peruuta</button>
   </div>
   <div id="board"></div>
   <div id="msg"></div>
@@ -131,12 +145,19 @@ function buildPlayers(n){
   const wallsEach=Math.floor(24/n);
   return slots.map((s,i)=>({...COLORS[i], ...s, walls:wallsEach}));
 }
-let players=[], hWalls=new Set(), vWalls=new Set(), cur=0, over=false, chosenN=2, mode='move';
+let players=[], hWalls=new Set(), vWalls=new Set(), cur=0, over=false, chosenN=2, mode='move', pending=null;
+function cancelAction(){
+  if(pending){ pending=null; setMsg(''); render(); }
+  else { setMode('move'); setMsg(''); }
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('cancelBtn').onclick=cancelAction;
+});
 
 document.getElementById('moveModeBtn').onclick=()=>setMode('move');
 document.getElementById('wallModeBtn').onclick=()=>setMode('wall');
 function setMode(m){
-  mode=m;
+  mode=m; pending=null;
   document.getElementById('moveModeBtn').classList.toggle('sel',m==='move');
   document.getElementById('wallModeBtn').classList.toggle('sel',m==='wall');
   render();
@@ -214,6 +235,7 @@ function render(){
     hud.appendChild(d);
   });
   const modeRow=document.getElementById('modeRow');
+  modeRow.classList.toggle('wall',mode==='wall');
   if(players[cur]){
     const p=players[cur];
     const edgeStyle={
@@ -229,8 +251,12 @@ function render(){
   const board=document.getElementById('board');
   board.innerHTML='';
   const dim=2*SIZE-1;
-  board.style.gridTemplateColumns=`repeat(${SIZE-1},26px 8px) 26px`;
-  board.style.gridTemplateRows=`repeat(${SIZE-1},26px 8px) 26px`;
+  const hm = players.length>2 ? 100 : 20, vm = 100;
+  const S = Math.max(200, Math.min(window.innerWidth-hm, window.innerHeight-vm));
+  const ratio=0.45;
+  const cs = Math.floor((S-8)/(SIZE+(SIZE-1)*ratio)*10)/10, ss = Math.round(cs*ratio*10)/10;
+  board.style.gridTemplateColumns=`repeat(${SIZE-1},${cs}px ${ss}px) ${cs}px`;
+  board.style.gridTemplateRows=`repeat(${SIZE-1},${cs}px ${ss}px) ${cs}px`;
   board.className=mode==='wall'?'wallmode':'';
   const moves = (over||mode!=='move')? [] : validMoves(players[cur]);
   for(let i=0;i<dim;i++){
@@ -248,11 +274,11 @@ function render(){
         if(occ){const pw=document.createElement('div');pw.className='pawn';pw.style.background=occ.color;el.appendChild(pw);}
       } else if(i%2===1&&j%2===0){
         const r=(i-1)/2,c=j/2;
-        el.className='hslot'+(hWalls.has(r+'_'+c)?' on':'');
+        el.className='hslot'+(hWalls.has(r+'_'+c)?' on':'')+(pending&&pending.type==='h'&&pending.r===r&&pending.c===c?' pend':'');
         if(mode==='wall'&&!over) el.onclick=()=>doWall('h',r,c);
       } else if(i%2===0&&j%2===1){
         const r=i/2,c=(j-1)/2;
-        el.className='vslot'+(vWalls.has(r+'_'+c)?' on':'');
+        el.className='vslot'+(vWalls.has(r+'_'+c)?' on':'')+(pending&&pending.type==='v'&&pending.r===r&&pending.c===c?' pend':'');
         if(mode==='wall'&&!over) el.onclick=()=>doWall('v',r,c);
       } else {
         el.className='joint';
@@ -277,16 +303,32 @@ function doWall(type,r,c){
   const p=players[cur];
   if(p.walls<=0){setMsg(p.ade+' ei ole enää seiniä.');return;}
   const set = type==='h'?hWalls:vWalls;
+  // seinä on aina 2 pitkä: valitaan kaksi vierekkäistä paikkaa
   const key=r+'_'+c;
-  if(set.has(key)) return;
-  set.add(key);
+  if(set.has(key)){ setMsg('Siinä on jo seinä.'); return; }
+  if(pending && pending.type===type && pending.r===r && pending.c===c){ pending=null; setMsg(''); render(); return; }
+  const adj = pending && pending.type===type &&
+    (type==='h' ? (pending.r===r && Math.abs(pending.c-c)===1) : (pending.c===c && Math.abs(pending.r-r)===1));
+  if(!adj){ pending={type,r,c}; setMsg('Valitse viereinen kohta (vasen/oikea tai ylä/ala) tai peruuta.'); render(); return; }
+  let k1,k2;
+  if(type==='h'){ const c0=Math.min(c,pending.c); k1=r+'_'+c0; k2=r+'_'+(c0+1); }
+  else { const r0=Math.min(r,pending.r); k1=r0+'_'+c; k2=(r0+1)+'_'+c; }
+  pending=null;
+  if(set.has(k1)||set.has(k2)){ setMsg('Siinä on jo seinä.'); render(); return; }
+  // ristikkäiset seinät: keskipiste sama
+  const other = type==='h'?vWalls:hWalls;
+  const [a,b]=k1.split('_').map(Number);
+  const crossKey = type==='h' ? a+'_'+b : a+'_'+b;
+  if(other.has(crossKey)){ setMsg('Seinät eivät saa mennä ristiin.'); render(); return; }
+  set.add(k1); set.add(k2);
   const ok=players.every(hasPath);
-  if(!ok){ set.delete(key); setMsg('Seinä tukkisi jonkun reitin kokonaan – ei sallittu.'); render(); return; }
+  if(!ok){ set.delete(k1); set.delete(k2); setMsg('Seinä tukkisi jonkun reitin kokonaan – ei sallittu.'); render(); return; }
   p.walls--;
   setMsg('');
   cur=(cur+1)%players.length;
   render();
 }
+window.addEventListener('resize',()=>{ if(players.length&&!over) render(); });
 function setMsg(t){document.getElementById('msg').textContent=t;}
 function finish(p){
   over=true;
